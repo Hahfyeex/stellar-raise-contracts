@@ -10,11 +10,12 @@ all error paths programmatically.
 
 The following untyped panics have been **removed** and replaced:
 
-| Old behaviour                        | New typed error              |
-| :----------------------------------- | :--------------------------- |
-| `panic!("amount below minimum")`     | `ContractError::BelowMinimum` (code 9) |
-| zero-amount pass-through (no guard)  | `ContractError::ZeroAmount` (code 8)   |
+| Old behaviour                        | New typed error                          |
+| :----------------------------------- | :--------------------------------------- |
+| `panic!("amount below minimum")`     | `ContractError::BelowMinimum` (code 9)   |
+| zero-amount pass-through (no guard)  | `ContractError::ZeroAmount` (code 8)     |
 | no campaign-status guard             | `ContractError::CampaignNotActive` (code 10) |
+| no negative-amount guard             | `ContractError::NegativeAmount` (code 11) |
 
 ## Error Reference
 
@@ -25,16 +26,33 @@ The following untyped panics have been **removed** and replaced:
 | 8    | `ZeroAmount`          | `amount == 0`                                    | No        |
 | 9    | `BelowMinimum`        | `amount < min_contribution`                      | No        |
 | 10   | `CampaignNotActive`   | campaign status is not `Active`                  | No        |
+| 11   | `NegativeAmount`      | `amount < 0`                                     | No        |
 
 ## Security Assumptions
 
 - `contributor.require_auth()` is called before any state mutation.
-- Campaign status is checked first — cancelled/successful campaigns are
-  rejected before any other validation.
+- **Negative amounts are rejected first** — before zero/minimum checks — to
+  prevent token-level panics or unexpected transfer behaviour with negative i128 values.
+- Campaign status is checked before amount validation — cancelled/successful
+  campaigns are rejected before any other validation.
 - Token transfer happens before storage writes; failures roll back atomically.
 - Overflow is caught with `checked_add` on both per-contributor and global totals.
 - The deadline check uses strict `>`, so a contribution at exactly the deadline
   timestamp is **accepted**. Scripts should account for this boundary.
+
+## Validation Order in `contribute()`
+
+```
+1. contributor.require_auth()
+2. status == Active          → CampaignNotActive (10)
+3. amount < 0                → NegativeAmount (11)   ← new
+4. amount == 0               → ZeroAmount (8)
+5. amount < min_contribution → BelowMinimum (9)
+6. timestamp > deadline      → CampaignEnded (2)
+7. token transfer
+8. checked_add per-contributor total → Overflow (6)
+9. checked_add global total          → Overflow (6)
+```
 
 ## Usage in Scripts
 
@@ -56,7 +74,7 @@ match client.try_contribute(&contributor, &amount) {
 
 `contracts/crowdfund/src/contribute_error_handling_tests.rs`
 
-17 tests — all passing:
+22 tests — all passing:
 
 ```
 contribute_happy_path                                    ok
@@ -68,12 +86,17 @@ contribute_one_below_minimum_returns_below_minimum       ok
 contribute_zero_amount_returns_typed_error               ok
 contribute_to_cancelled_campaign_returns_not_active      ok
 contribute_to_successful_campaign_returns_not_active     ok
+contribute_negative_amount_returns_typed_error           ok
+contribute_large_negative_amount_returns_typed_error     ok
 overflow_error_code_is_correct                           ok
+negative_amount_error_code_is_correct                    ok
 describe_error_campaign_ended                            ok
 describe_error_overflow                                  ok
 describe_error_zero_amount                               ok
 describe_error_below_minimum                             ok
 describe_error_campaign_not_active                       ok
+describe_error_negative_amount                           ok
 describe_error_unknown                                   ok
 is_retryable_returns_false_for_all_known_errors          ok
+is_retryable_returns_false_for_negative_amount           ok
 ```

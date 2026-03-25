@@ -139,6 +139,13 @@ fn validate_description_accepts_exact_limit() {
 }
 
 #[test]
+fn validate_social_links_accepts_exact_limit() {
+    let env = Env::default();
+    let socials = soroban_string(&env, MAX_SOCIAL_LINKS_LENGTH, 's');
+    assert!(validate_social_links(&socials).is_ok());
+}
+
+#[test]
 fn validate_social_links_rejects_one_over_limit() {
     let env = Env::default();
     let socials = soroban_string(&env, MAX_SOCIAL_LINKS_LENGTH + 1, 's');
@@ -147,11 +154,25 @@ fn validate_social_links_rejects_one_over_limit() {
 }
 
 #[test]
+fn validate_bonus_goal_description_accepts_exact_limit() {
+    let env = Env::default();
+    let description = soroban_string(&env, MAX_BONUS_GOAL_DESCRIPTION_LENGTH, 'b');
+    assert!(validate_bonus_goal_description(&description).is_ok());
+}
+
+#[test]
 fn validate_bonus_goal_description_rejects_one_over_limit() {
     let env = Env::default();
     let description = soroban_string(&env, MAX_BONUS_GOAL_DESCRIPTION_LENGTH + 1, 'b');
     let err = validate_bonus_goal_description(&description).unwrap_err();
     assert!(err.contains("MAX_BONUS_GOAL_DESCRIPTION_LENGTH"));
+}
+
+#[test]
+fn validate_roadmap_description_accepts_exact_limit() {
+    let env = Env::default();
+    let description = soroban_string(&env, MAX_ROADMAP_DESCRIPTION_LENGTH, 'r');
+    assert!(validate_roadmap_description(&description).is_ok());
 }
 
 #[test]
@@ -174,9 +195,24 @@ fn validate_metadata_total_length_rejects_total_over_cap() {
 }
 
 #[test]
-fn validate_metadata_total_length_rejects_overflowed_sum() {
+fn validate_metadata_total_length_rejects_overflow_attempt() {
+    // Test that saturating_add prevents overflow attacks
+    // Even with MAX values that would overflow, the function should handle it gracefully
     let err = validate_metadata_total_length(u32::MAX, 1, 1).unwrap_err();
     assert!(err.contains("MAX_METADATA_TOTAL_LENGTH"));
+}
+
+#[test]
+fn validate_metadata_total_length_accepts_various_combinations() {
+    // Test various valid combinations (each component must be within individual limits)
+    assert!(validate_metadata_total_length(0, 0, 0).is_ok());
+    assert!(validate_metadata_total_length(128, 0, 0).is_ok());
+    assert!(validate_metadata_total_length(0, 2048, 0).is_ok());
+    assert!(validate_metadata_total_length(0, 0, 512).is_ok());
+    // Total must be <= 2304
+    assert!(validate_metadata_total_length(128, 2048, 0).is_ok()); // 2176 OK
+    assert!(validate_metadata_total_length(128, 0, 512).is_ok()); // 640 OK
+    assert!(validate_metadata_total_length(0, 2048, 255).is_ok()); // 2303 OK
 }
 
 #[test]
@@ -191,15 +227,30 @@ fn validate_contributor_capacity_rejects_when_full() {
 }
 
 #[test]
+fn validate_pledger_capacity_accepts_one_below_max() {
+    assert!(validate_pledger_capacity(MAX_PLEDGERS - 1).is_ok());
+}
+
+#[test]
 fn validate_pledger_capacity_rejects_when_full() {
     let err = validate_pledger_capacity(MAX_PLEDGERS).unwrap_err();
     assert!(err.contains("MAX_PLEDGERS"));
 }
 
 #[test]
+fn validate_roadmap_capacity_accepts_one_below_max() {
+    assert!(validate_roadmap_capacity(MAX_ROADMAP_ITEMS - 1).is_ok());
+}
+
+#[test]
 fn validate_roadmap_capacity_rejects_when_full() {
     let err = validate_roadmap_capacity(MAX_ROADMAP_ITEMS).unwrap_err();
     assert!(err.contains("MAX_ROADMAP_ITEMS"));
+}
+
+#[test]
+fn validate_stretch_goal_capacity_accepts_one_below_max() {
+    assert!(validate_stretch_goal_capacity(MAX_STRETCH_GOALS - 1).is_ok());
 }
 
 #[test]
@@ -355,7 +406,7 @@ fn pledge_rejects_new_pledger_when_index_full() {
 }
 
 #[test]
-#[should_panic(expected = "roadmap description exceeds MAX_ROADMAP_DESCRIPTION_LENGTH bytes")]
+#[should_panic(expected = "description too long")]
 fn add_roadmap_item_rejects_oversized_description() {
     let (env, client, creator, token_address, _admin) = setup();
     let deadline = env.ledger().timestamp() + 3_600;
@@ -367,7 +418,7 @@ fn add_roadmap_item_rejects_oversized_description() {
 }
 
 #[test]
-#[should_panic(expected = "roadmap exceeds MAX_ROADMAP_ITEMS")]
+#[should_panic(expected = "roadmap limit exceeded")]
 fn add_roadmap_item_rejects_when_capacity_full() {
     let (env, client, creator, token_address, _admin) = setup();
     let deadline = env.ledger().timestamp() + 3_600;
@@ -384,7 +435,7 @@ fn add_roadmap_item_rejects_when_capacity_full() {
 }
 
 #[test]
-#[should_panic(expected = "stretch goals exceed MAX_STRETCH_GOALS")]
+#[should_panic(expected = "stretch goal limit exceeded")]
 fn add_stretch_goal_rejects_when_capacity_full() {
     let (env, client, creator, token_address, _admin) = setup();
     let deadline = env.ledger().timestamp() + 3_600;
