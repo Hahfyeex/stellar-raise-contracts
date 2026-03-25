@@ -261,7 +261,7 @@ pub struct RoadmapItem {
 
 ## Testing and Security Notes
 
-- Test coverage is designed for 95%+ lines in the crowdfund module.
+- Test coverage target remains 95%+ lines in the crowdfund module.
 - Critical code paths covered:
   - `initialize`: repeated init, platform fee bounds, bonus goal guard.
   - `contribute`: minimum amount guard, deadline guard, aggregation, overflow protection.
@@ -269,6 +269,8 @@ pub struct RoadmapItem {
   - `withdraw`: deadline, goal check, platform fee, NFT mint flow.
   - `refund`, `cancel`, `add_roadmap_item`, `add_stretch_goal`, `current_milestone`, `get_stats`, `bonus_goal`.
   - `upgrade`: admin-only authorization.
+  - `stellar_token_minter.test.rs`: explicit security/readability tests for
+    deadline guards, goal guards, bonus-goal capping, and upgrade auth.
 
 ### Security assumptions
 
@@ -312,7 +314,11 @@ pub struct RoadmapItem {
 
 ## Test Coverage
 
-Tests live in `contracts/crowdfund/src/test.rs` (functional), `contracts/crowdfund/src/auth_tests.rs` (authorization), and `contracts/crowdfund/src/stellar_token_minter_test.rs` (minter-focused edge cases).
+Tests live in:
+- `contracts/crowdfund/src/test.rs` (functional)
+- `contracts/crowdfund/src/auth_tests.rs` (authorization)
+- `contracts/crowdfund/src/stellar_token_minter_test.rs` (minter-focused
+  security/readability edge cases)
 
 | Area | Tests |
 |---|---|
@@ -330,6 +336,19 @@ Tests live in `contracts/crowdfund/src/test.rs` (functional), `contracts/crowdfu
 | roadmap | add and retrieve items |
 | auth | initialize, withdraw, contribute auth guards |
 | upgrade | admin-only auth guard (non-admin panics) |
+
+### Latest token-minter focused test execution
+
+Run command:
+
+```bash
+cargo test --package crowdfund stellar_token_minter_test
+```
+
+Security notes validated by this suite:
+- Deadline/goal gates prevent premature or invalid `collect_pledges`.
+- Upgrade remains admin-gated.
+- Bonus-goal progress is capped at 10,000 bps (100%) for UI safety.
 
 Run with:
 
