@@ -101,6 +101,25 @@ impl core::fmt::Display for StateSizeError {
     }
 }
 
+impl core::fmt::Display for StateSizeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            StateSizeError::ContributorLimitExceeded => {
+                write!(f, "contributor limit exceeded")
+            }
+            StateSizeError::RoadmapLimitExceeded => {
+                write!(f, "roadmap limit exceeded")
+            }
+            StateSizeError::StretchGoalLimitExceeded => {
+                write!(f, "stretch goal limit exceeded")
+            }
+            StateSizeError::StringTooLong => {
+                write!(f, "string too long")
+            }
+        }
+    }
+}
+
 // ── Validation helpers ────────────────────────────────────────────────────────
 
 /// Validate title length.
