@@ -13,6 +13,7 @@ import {
   ALLOWED_CSS_VARIABLES,
   CssVariablesMap,
   useCssVariable,
+  useDocsCssVariable,
   THEME,
   COLORS,
   SPACING,
@@ -146,12 +147,26 @@ describe('CssVariablesUsage', () => {
 
   afterEach(() => {
     document.body.removeChild(container);
+    cssVars.invalidateCache();
   });
 
   describe('get', () => {
-    it('should get a valid CSS variable value', () => {
-      const value = cssVars.get('--color-primary-blue');
-      expect(value).toBe('#0066FF');
+    it('should get a valid CSS variable value with caching', () => {
+      const value1 = cssVars.get('--color-primary-blue');
+      expect(value1).toBe('#0066FF');
+
+      const value2 = cssVars.get('--color-primary-blue');
+      expect(value2).toBe('#0066FF');
+    });
+
+    it('should invalidate cache on set', () => {
+      cssVars.set('--color-primary-blue', '#ff0000');
+      expect(cssVars.get('--color-primary-blue')).toBe('#ff0000');
+    });
+
+    it('should invalidate cache on remove', () => {
+      cssVars.remove('--color-primary-blue');
+      expect(container.style.getPropertyValue('--color-primary-blue')).toBe('');
     });
 
     it('should get CSS variable without -- prefix', () => {

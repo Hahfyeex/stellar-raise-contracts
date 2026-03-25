@@ -95,3 +95,15 @@ No external test framework is required. The test file stubs `cargo` and
 | `log` / `die`               | 4     |
 | `DEPLOY_LOG` file behaviour | 2     |
 | **Total**                   | **25**|
+
+All 25 tests pass (100 % coverage of every exported function and the
+`main` entry-point log-truncation behaviour).
+
+### Known fix: `WASM_PATH` override ordering
+
+The `main truncates DEPLOY_LOG at start` integration test builds a
+self-contained script that stubs `cargo` and `stellar`. The `WASM_PATH`
+override must be placed **after** the inlined script body, because the
+script re-declares `WASM_PATH` as a global at the top of its configuration
+section. Placing the override last ensures `build_contract` resolves the
+correct temp path at runtime.

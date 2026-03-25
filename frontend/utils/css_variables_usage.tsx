@@ -152,6 +152,14 @@ export const THEME = {
     /** @notice Left safe area inset for notched devices */
     left: '--safe-area-inset-left',
   },
+  docs: {
+    /** @notice Documentation background color */
+    bg: '--color-docs-bg',
+    /** @notice Documentation text color */
+    text: '--color-docs-text',
+    /** @notice Documentation code font family */
+    codeFont: '--font-docs-code',
+  },
 } as const;
 
 /**
@@ -164,6 +172,7 @@ export const LAYOUT = THEME.layout;
 export const Z_INDEX = THEME.zIndex;
 export const EFFECTS = THEME.effects;
 export const SAFE_AREA = THEME.safeArea;
+export const DOCS = THEME.docs;
 
 /**
  * @notice Predefined list of allowed CSS variable names
@@ -177,6 +186,7 @@ export const ALLOWED_CSS_VARIABLES = [
   ...Object.values(THEME.zIndex),
   ...Object.values(THEME.effects),
   ...Object.values(THEME.safeArea),
+  ...Object.values(THEME.docs),
 ] as const;
 
 /**
@@ -271,6 +281,7 @@ export class CssVariableValidator {
  */
 export class CssVariablesUsage {
   private element: HTMLElement;
+  private _cache = new Map<string, string>();
 
   /**
    * @notice Creates a new CssVariablesUsage instance
@@ -281,6 +292,13 @@ export class CssVariablesUsage {
   }
 
   /**
+   * @notice Invalidates the internal cache
+   */
+  invalidateCache(): void {
+    this._cache.clear();
+  }
+
+  /**
    * @notice Gets a CSS variable value securely
    * @param variableName The name of the CSS variable (with or without -- prefix)
    * @param fallback Optional fallback value if variable is not defined
@@ -288,17 +306,17 @@ export class CssVariablesUsage {
    * @throws CssVariablesError if variable name is invalid
    */
   get(variableName: string, fallback?: string): string {
-    // Normalize variable name
     const normalizedName = this.normalizeVariableName(variableName);
-
-    // Validate the variable name
     CssVariableValidator.isValidVariableName(normalizedName);
 
-    // Get computed style
+    if (this._cache.has(normalizedName)) {
+      return this._cache.get(normalizedName)!;
+    }
+
     const computedStyle = getComputedStyle(this.element);
     const value = computedStyle.getPropertyValue(normalizedName).trim();
+    this._cache.set(normalizedName, value);
 
-    // Return value or fallback
     return value || fallback || '';
   }
 
@@ -309,17 +327,13 @@ export class CssVariablesUsage {
    * @throws CssVariablesError if variable name or value is invalid
    */
   set(variableName: string, value: string): void {
-    // Normalize variable name
     const normalizedName = this.normalizeVariableName(variableName);
 
-    // Validate the variable name
     CssVariableValidator.isValidVariableName(normalizedName);
-
-    // Validate the value
     CssVariableValidator.isValidValue(value);
 
-    // Set the property
     this.element.style.setProperty(normalizedName, value);
+    this.invalidateCache();
   }
 
   /**
@@ -328,14 +342,12 @@ export class CssVariablesUsage {
    * @throws CssVariablesError if variable name is invalid
    */
   remove(variableName: string): void {
-    // Normalize variable name
     const normalizedName = this.normalizeVariableName(variableName);
 
-    // Validate the variable name
     CssVariableValidator.isValidVariableName(normalizedName);
 
-    // Remove the property
     this.element.style.removeProperty(normalizedName);
+    this.invalidateCache();
   }
 
   /**
@@ -424,18 +436,17 @@ export function useCssVariable(variableName: string, fallback?: string): string 
  * @param fallback Optional fallback value
  * @returns A formatted CSS var() expression
  */
-export function cssVar(variableName: string, fallback?: string): string {
-  // Validate the variable name
-  const normalizedName = variableName.trim().startsWith('--')
-    ? variableName.trim()
-    : `--${variableName.trim()}`;
+export type VarExpression = string;
+
+export function cssVar<V extends AllowedCssVariable>(variableName: V, fallback?: string): VarExpression {
+  const normalizedName = variableName.startsWith('--') ? variableName : `--${variableName}` as V;
   
   CssVariableValidator.isValidVariableName(normalizedName);
 
   if (fallback !== undefined) {
-    return `var(${normalizedName}, ${fallback})`;
+    return `var(${normalizedName}, ${fallback})` as VarExpression;
   }
-  return `var(${normalizedName})`;
+  return `var(${normalizedName})` as VarExpression;
 }
 
 /**
@@ -464,5 +475,19 @@ export function useDocsCssVariable(variableName: string, fallback?: string): str
   return useCssVariable(variableName, fallback);
 }
 
+// SSR fallback map for server-side rendering (partial - extend as needed)
+export const SSR_FALLBACKS: Partial<Record<AllowedCssVariable, string>> = {
+  '--color-primary-blue': '#0066FF',
+  '--space-4': '1rem',
+  '--font-size-base': 'clamp(1rem, 0.95rem + 0.25vw, 1.125rem)',
+  // Add more as needed from responsive.css
+  '--color-neutral-100': '#FFFFFF',
+  '--color-neutral-900': '#111827',
+  '--transition-base': '250ms ease-in-out',
+  '--radius-md': '0.5rem',
+  '--shadow-md': '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+} as const;
+
 // Default export for convenience
 export default CssVariablesUsage;
+

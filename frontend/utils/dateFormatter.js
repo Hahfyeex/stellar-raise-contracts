@@ -64,6 +64,6 @@ export const formatRelativeTime = (timestamp) => {
  * @returns {boolean} True if deadline has passed
  */
 export const isExpired = (timestamp) => {
-  if (!timestamp) return false;
+  if (timestamp == null) return false;
   return Math.floor(Date.now() / 1000) > Number(timestamp);
 };

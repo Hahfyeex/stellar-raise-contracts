@@ -203,18 +203,22 @@ _test_main_truncates_log() {
   echo 'stale content' > "$TMP_LOG"
 
   # Build a self-contained script: real functions + stubbed externals + call main
+  local TMP_WASM
+  TMP_WASM=$(mktemp --suffix=.wasm)
   {
-    # Stub cargo and stellar before sourcing so they override any PATH lookup
-    echo 'cargo()   { return 0; }'
+    # Stub cargo (touch the WASM so the post-build check passes) and stellar
+    echo "cargo()   { touch \"$TMP_WASM\"; return 0; }"
     echo 'stellar() { case "$2" in deploy) echo CXXX;; *) ;; esac; return 0; }'
     # Inline the deployment script with "main "$@"" replaced by a no-op
     sed 's/^main "\$@"$/: # stubbed/' "$SCRIPT"
+    # Override WASM_PATH after the script body (which re-declares it) so build_contract finds the file
+    echo "WASM_PATH=\"$TMP_WASM\""
     echo "main GCREATOR GTOKEN 1000 $FUTURE 1"
   } > "$TMP_SCRIPT"
 
   DEPLOY_LOG="$TMP_LOG" NETWORK=testnet bash "$TMP_SCRIPT" &>/dev/null
   local rc=$?
-  rm -f "$TMP_SCRIPT"
+  rm -f "$TMP_SCRIPT" "$TMP_WASM"
 
   if [[ $rc -eq 0 ]] && ! grep -q 'stale content' "$TMP_LOG"; then
     rm -f "$TMP_LOG"

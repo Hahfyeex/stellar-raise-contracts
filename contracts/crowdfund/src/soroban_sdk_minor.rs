@@ -1,47 +1,7 @@
-//! # Soroban SDK Minor Version Bump Review
+//! Soroban SDK minor-bump helpers for frontend UI and scalability.
 //!
-//! This module documents and validates the upgrade from `soroban-sdk 22.0.0`
-//! to `soroban-sdk 22.x` (latest minor/patch in the 22.x series, currently
-//! tracking toward 22.x compatibility with the workspace pinned at `"22.0.0"`).
-//!
-//! ## Purpose
-//!
-//! Soroban SDK follows a versioning scheme tied to Stellar Protocol versions.
-//! A *minor* version bump within the same major series typically introduces:
-//!
-//! - New utility functions or trait implementations on existing types.
-//! - Deprecation notices for older APIs (with backward-compatible alternatives).
-//! - Performance improvements in host-function dispatch.
-//! - Additional `#[contracttype]` derive capabilities.
-//! - Expanded `testutils` helpers for more expressive test assertions.
-//!
-//! ## What Changed (22.0.0 → 22.x)
-//!
-//! | Area | Change | Impact |
-//! |------|--------|--------|
-//! | `Env::storage()` | `extend_ttl` signature stabilised | No breaking change |
-//! | `token::Client` | `transfer_from` added | Additive |
-//! | `contracttype` | Derive now supports `#[serde]` feature flag | Opt-in |
-//! | `testutils` | `Ledger::set_sequence_number` added | Test-only |
-//! | `BytesN` | `to_array()` const-fn stabilised | Additive |
-//!
-//! ## Security Assumptions
-//!
-//! 1. **No storage layout changes** – The `contracttype` ABI is stable across
-//!    minor bumps; existing on-chain data remains readable.
-//! 2. **Auth model unchanged** – `require_auth()` semantics are identical.
-//! 3. **Host-function IDs stable** – WASM binaries compiled against 22.0.0
-//!    remain compatible with a 22.x host.
-//! 4. **Overflow checks preserved** – `overflow-checks = true` in the release
-//!    profile is independent of the SDK version.
-//!
-//! ## Upgrade Checklist
-//!
-//! - [x] Bump `soroban-sdk` in `[workspace.dependencies]` (Cargo.toml).
-//! - [x] Run `cargo check --target wasm32-unknown-unknown` — zero errors.
-//! - [x] Run full test suite — all tests pass.
-//! - [x] Verify `CONTRACT_VERSION` constant is unchanged (storage-layout guard).
-//! - [x] Confirm `.cargo/config.toml` WASM flags are still valid.
+//! This module centralizes low-level helpers used when reviewing/operating a
+//! minor Soroban SDK bump so behavior is explicit, testable, and audit-friendly.
 
 #![allow(dead_code)]
 
@@ -54,6 +14,15 @@ pub const SDK_VERSION_BASELINE: &str = "22.0.0";
 
 /// The target minor-bump version being reviewed.
 pub const SDK_VERSION_TARGET: &str = "22.x";
+
+/// Maximum number of records returned in a single frontend page.
+pub const FRONTEND_PAGE_SIZE_MAX: u32 = 100;
+
+/// Minimum number of records returned in a single frontend page.
+pub const FRONTEND_PAGE_SIZE_MIN: u32 = 1;
+
+/// Max event-note payload accepted for upgrade audit logs.
+pub const UPGRADE_NOTE_MAX_LEN: u32 = 256;
 
 // ── Compatibility helpers ─────────────────────────────────────────────────────
 
@@ -79,6 +48,14 @@ pub struct SdkChangeRecord {
     pub is_breaking: bool,
     /// Human-readable description stored on-chain for auditability.
     pub description: String,
+}
+
+/// Frontend pagination window computed from `offset` and `requested`.
+#[derive(Clone, PartialEq, Debug)]
+#[contracttype]
+pub struct PaginationWindow {
+    pub start: u32,
+    pub limit: u32,
 }
 
 /// Assesses whether upgrading from `from_version` to `to_version` is safe
@@ -123,6 +100,28 @@ fn parse_major(version: &str) -> u32 {
         .unwrap_or(0)
 }
 
+/// @notice Clamp frontend page size into bounded range.
+/// @dev Bounds protect indexer/UI from oversized scans after SDK upgrades.
+pub fn clamp_page_size(requested: u32) -> u32 {
+    requested.clamp(FRONTEND_PAGE_SIZE_MIN, FRONTEND_PAGE_SIZE_MAX)
+}
+
+/// @notice Build a bounded pagination window.
+/// @dev Saturating arithmetic avoids overflow when `offset` is near `u32::MAX`.
+pub fn pagination_window(offset: u32, requested_limit: u32) -> PaginationWindow {
+    let limit = clamp_page_size(requested_limit);
+    PaginationWindow {
+        start: offset,
+        limit: limit.saturating_sub(0),
+    }
+}
+
+/// @notice Validate optional SDK-upgrade note used for UI/audit display.
+/// @dev Length bound keeps event payloads compact and indexer-friendly.
+pub fn validate_upgrade_note(note: &String) -> bool {
+    note.len() <= UPGRADE_NOTE_MAX_LEN
+}
+
 /// Validates that a WASM hash is non-zero before an upgrade is applied.
 ///
 /// A zero hash indicates an uninitialised value and must be rejected to
@@ -163,5 +162,26 @@ pub fn emit_upgrade_audit_event(
             Symbol::new(env, "reviewed"),
         ),
         (reviewer, from_version, to_version),
+    );
+}
+
+/// @notice Emit SDK-upgrade review with a bounded note for frontend indexing.
+/// @dev Falls back to panic on oversized note to keep event schema predictable.
+pub fn emit_upgrade_audit_event_with_note(
+    env: &Env,
+    from_version: String,
+    to_version: String,
+    reviewer: Address,
+    note: String,
+) {
+    if !validate_upgrade_note(&note) {
+        panic!("upgrade note exceeds UPGRADE_NOTE_MAX_LEN");
+    }
+    env.events().publish(
+        (
+            Symbol::new(env, "sdk_upgrade"),
+            Symbol::new(env, "reviewed_note"),
+        ),
+        (reviewer, from_version, to_version, note),
     );
 }

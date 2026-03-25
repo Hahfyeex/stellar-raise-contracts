@@ -169,6 +169,25 @@ EOF
 
 assert_exit "fails when smoke test uses deprecated soroban-cli" 1 bash -c "cd '$tmpdir7' && bash '$OLDPWD/$SCRIPT'"
 
+# ── Test 9: fails when rust_ci.yml is missing the frontend job ────────────────
+
+tmpdir8=$(mktemp -d)
+trap 'rm -rf "$tmpdir8"' EXIT
+
+mkdir -p "$tmpdir8/.github/workflows"
+cat > "$tmpdir8/.github/workflows/rust_ci.yml" <<'EOF'
+name: Rust CI
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo build --release --target wasm32-unknown-unknown -p crowdfund
+EOF
+echo "name: Smoke"      > "$tmpdir8/.github/workflows/testnet_smoke.yml"
+echo "name: Spellcheck" > "$tmpdir8/.github/workflows/spellcheck.yml"
+
+assert_exit "fails when rust_ci.yml is missing the frontend job" 1 bash -c "cd '$tmpdir8' && bash '$OLDPWD/$SCRIPT'"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 echo ""

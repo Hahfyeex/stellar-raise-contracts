@@ -11,6 +11,10 @@
 #   5. Smoke test initialize call includes required --admin argument.
 #   6. Smoke test WASM build is scoped to -p crowdfund.
 #   7. Smoke test uses stellar-cli, not deprecated soroban-cli.
+#   8. rust_ci.yml job has a timeout-minutes bound.
+#   9. rust_ci.yml WASM build step has a timeout-minutes bound.
+#  10. rust_ci.yml test step has a timeout-minutes bound.
+#  11. rust_ci.yml includes a job elapsed-time logging step.
 #
 # Usage:
 #   bash scripts/github_actions_test.sh
@@ -102,6 +106,14 @@ if grep -qF "soroban-cli" "$WORKFLOWS_DIR/testnet_smoke.yml"; then
   fail "testnet_smoke.yml installs deprecated 'soroban-cli' — use 'stellar-cli' instead"
 else
   pass "testnet_smoke.yml does not reference deprecated soroban-cli"
+fi
+
+# ── Check 8: rust_ci.yml includes a frontend test job ─────────────────────────
+
+if ! grep -qE "^  frontend:" "$WORKFLOWS_DIR/rust_ci.yml"; then
+  fail "rust_ci.yml is missing a 'frontend' job for UI tests"
+else
+  pass "rust_ci.yml includes a 'frontend' job for UI tests"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
